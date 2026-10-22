@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart LPG Dashboard</title>
+<style>
+:root{--bg:#09090b;--card:#121216;--tx:#f4f4f5;--mut:#8b8b96;--line:#26262d;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--sh:18px}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1100px;padding:20px;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+h1{margin:0;font-size:26px}.sub{color:var(--mut);font-size:13px}
+#gear{background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 4px var(--sh) rgba(0,0,0,.35)}
+.card.wide{grid-column:1/-1}
+.card h3{margin:0 0 8px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.big{font-size:30px;font-weight:700}.wide .big{font-size:44px}
+.note{color:var(--mut);font-size:13px;min-height:18px}
+.good{color:var(--ok)}.bad{color:var(--bad)}.wait{color:var(--warn)}
+.alert #c-st{border-color:var(--bad);animation:p 1s infinite}
+@keyframes p{50%{box-shadow:0 0 24px var(--bad)}}
+.ev{font-size:14px;padding:6px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+#panel{position:fixed;top:0;right:0;width:320px;max-width:100%;height:100%;overflow:auto;background:var(--card);border-left:1px solid var(--line);padding:16px;display:none;z-index:9}
+#panel label{display:block;font-size:12px;color:var(--mut);margin:12px 0 4px}
+#panel input[type=text],#panel select{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--tx)}
+#panel input[type=color]{width:100%;height:34px;border:0;background:none}
+.row{display:flex;gap:6px;margin-bottom:6px}.row input{flex:1}
+.row button,#panel>button{background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+</style></head><body>
+<div class="top"><div><h1 id="title">Smart LPG Gas Monitoring System</h1><div class="sub" id="sub">Connecting...</div></div>
+<button id="gear">&#9881; Customize</button></div>
+<div class="grid" id="grid"></div>
+
+<div id="panel"><b>Customize dashboard</b>
+<label>Title</label><input type="text" id="f-title">
+<label>Theme</label><select id="f-theme"><option value="dark">Dark</option><option value="light">Light</option></select>
+<label>Background</label><input type="color" id="f-bg">
+<label>Card colour</label><input type="color" id="f-card">
+<label>Safe colour</label><input type="color" id="f-ok">
+<label>Alert colour</label><input type="color" id="f-bad">
+<label>Shadow size</label><input type="range" id="f-sh" min="0" max="50" style="width:100%">
+<label>Card names &amp; position</label><div id="rows"></div>
+<button id="reset">Reset to default</button> <button id="close">Close</button></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const NAMES={st:'Gas Status',mq2:'MQ2 Sensor',air:'MQ135 Sensor',valve:'Valve',led:'LED',buz:'Buzzer',dev:'Device',log:'Recent Events'};
+const THEMES={dark:{bg:'#09090b',card:'#121216',tx:'#f4f4f5',mut:'#8b8b96',line:'#26262d'},light:{bg:'#f4f4f5',card:'#ffffff',tx:'#18181b',mut:'#6b7280',line:'#e5e7eb'}};
+const DEF={title:'Smart LPG Gas Monitoring System',theme:'dark',bg:'#09090b',card:'#121216',ok:'#22c55e',bad:'#ef4444',sh:18,labels:{},order:Object.keys(NAMES)};
+let cfg=Object.assign({},DEF);
+try{Object.assign(cfg,JSON.parse(localStorage.getItem('lpgcfg')||'{}'));}catch(e){}
+cfg.order=cfg.order.filter(k=>NAMES[k]);Object.keys(NAMES).forEach(k=>{if(!cfg.order.includes(k))cfg.order.push(k);});
+const save=()=>{try{localStorage.setItem('lpgcfg',JSON.stringify(cfg));}catch(e){}};
+function apply(){
+ const t=THEMES[cfg.theme],r=document.documentElement.style;
+ r.setProperty('--bg',cfg.bg);r.setProperty('--card',cfg.card);r.setProperty('--ok',cfg.ok);r.setProperty('--bad',cfg.bad);r.setProperty('--sh',cfg.sh+'px');
+ ['tx','mut','line'].forEach(k=>r.setProperty('--'+k,t[k]));
+ $('title').textContent=cfg.title;
+ const g=$('grid');g.innerHTML='';
+ cfg.order.forEach(id=>{const c=document.createElement('div');c.className='card'+(id==='st'||id==='log'?' wide':'');c.id='c-'+id;
+  c.innerHTML='<h3></h3><div class="big"></div><div class="note"></div>';c.querySelector('h3').textContent=cfg.labels[id]||NAMES[id];g.appendChild(c);});
+ if(last)render(last);
+}
+function panel(){
+ $('f-title').value=cfg.title;$('f-theme').value=cfg.theme;['bg','card','ok','bad','sh'].forEach(k=>$('f-'+k).value=cfg[k]);
+ const rows=$('rows');rows.innerHTML='';
+ cfg.order.forEach((id,i)=>{const d=document.createElement('div');d.className='row';
+  d.innerHTML='<input type="text"><button>&uarr;</button><button>&darr;</button>';
+  const inp=d.querySelector('input');inp.value=cfg.labels[id]||NAMES[id];
+  inp.oninput=()=>{cfg.labels[id]=inp.value;save();apply();};
+  const [u,dn]=d.querySelectorAll('button');
+  u.onclick=()=>{if(i>0){[cfg.order[i-1],cfg.order[i]]=[cfg.order[i],cfg.order[i-1]];save();apply();panel();}};
+  dn.onclick=()=>{if(i<cfg.order.length-1){[cfg.order[i+1],cfg.order[i]]=[cfg.order[i],cfg.order[i+1]];save();apply();panel();}};
+  rows.appendChild(d);});
+}
+['title','bg','card','ok','bad','sh'].forEach(k=>$('f-'+k).oninput=e=>{cfg[k]=k==='sh'?+e.target.value:e.target.value;save();apply();});
+$('f-theme').onchange=e=>{cfg.theme=e.target.value;cfg.bg=THEMES[cfg.theme].bg;cfg.card=THEMES[cfg.theme].card;save();apply();panel();};
+$('reset').onclick=()=>{cfg=Object.assign({},DEF,{labels:{},order:Object.keys(NAMES)});save();apply();panel();};
+$('gear').onclick=()=>{$('panel').style.display='block';panel();};
+$('close').onclick=()=>$('panel').style.display='none';
+
+let last=null;
+function set(id,text,cls,note){const c=$('c-'+id);if(!c)return;const b=c.querySelector('.big');b.textContent=text;b.className='big '+(cls||'');c.querySelector('.note').textContent=note||'';}
+function render(p){
+ const d=p.state;if(!d){set('st','NO DATA YET','wait','Waiting for the device to connect');return;}
+ const off=p.age>15,w=d.status==='WARMUP',al=d.status==='ALERT';
+ document.body.className=al&&!off?'alert':'';
+ document.title=(al?'\u{1F6A8} ':'')+cfg.title;
+ set('st',off?'DEVICE OFFLINE':al?'GAS LEAK!':w?'WARMING UP':'SAFE',off||w?'wait':al?'bad':'good',off?'No data for '+p.age+'s - check device power / Wi-Fi':al?'Cause: '+d.reason:w?'Sensors heating':'System is stable');
+ set('mq2',w?'WARMING UP':d.mq2,w?'wait':d.mq2==='SAFE'?'good':'bad','LPG / combustible gas');
+ set('air',w?'WARMING UP':d.air,w?'wait':d.air==='AIR: GOOD'?'good':'bad','Air quality / harmful gas');
+ set('valve',d.valve,d.valve==='OPEN'?'good':'bad','Servo-driven gas valve');
+ set('led',d.led,d.led==='GREEN'?'good':'bad','');
+ set('buz',d.buzzer,d.buzzer==='ON'?'bad':'','');
+ set('dev',d.house,'',d.ssid+' | '+d.rssi+' dBm | updated '+p.age+'s ago');
+ const l=$('c-log');if(l){const b=l.querySelector('.big');b.className='';b.style.fontSize='14px';b.innerHTML='';
+  p.events.forEach(e=>{const r=document.createElement('div');r.className='ev';
+   r.innerHTML='<span></span><span></span>';r.children[0].textContent=new Date(e.t).toLocaleString();
+   r.children[1].textContent=e.status==='ALERT'?'ALERT: '+e.reason:e.status;r.children[1].className=e.status==='ALERT'?'bad':'good';b.appendChild(r);});}
+ $('sub').textContent='Live | last data '+p.age+'s ago';
+}
+async function poll(){try{const r=await fetch('/api/state',{cache:'no-store'});last=await r.json();render(last);}catch(e){$('sub').textContent='Cannot reach server';}}
+apply();(function loop(){poll().finally(()=>setTimeout(loop,2000));})();
+</script></body></html>
